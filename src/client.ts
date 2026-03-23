@@ -112,7 +112,8 @@ function buildClientOptions(workspace: URI): LanguageClientOptions {
 	return {
 		documentSelector: [
 			{ scheme: 'file', language: 'scss', pattern },
-			{ scheme: 'file', language: 'vue', pattern }
+			{ scheme: 'file', language: 'vue', pattern },
+			{ scheme: 'file', language: 'astro', pattern }
 		],
 		synchronize: {
 			configurationSection: ['scss'],
