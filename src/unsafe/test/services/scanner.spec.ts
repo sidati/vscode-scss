@@ -116,4 +116,19 @@ describe('Services/Scanner', () => {
 			assert.strictEqual(scanner.readFileStub.callCount, 1);
 		});
 	});
+
+	describe('.scan (package exports)', () => {
+		it('should scan files imported through package exports', async () => {
+			const root = path.resolve(__dirname, '../../../../fixtures/unit/exports');
+			const storage = new StorageService();
+			const scanner = new ScannerService(storage, helpers.makeSettings());
+
+			await scanner.scan([path.join(root, 'main.scss')]);
+
+			assert.deepStrictEqual(storage.keys(), [
+				URI.file(path.join(root, 'main.scss')).toString(),
+				URI.file(path.join(root, 'node_modules/@scope/pkg/dist/waitrose/web/spacing.scss')).toString()
+			]);
+		});
+	});
 });

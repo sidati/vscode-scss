@@ -8,6 +8,7 @@ import { INode, NodeType } from '../types/nodes';
 import type { IDocument, IDocumentSymbols, IVariable, IImport } from '../types/symbols';
 import { getNodeAtOffset, getParentNodeByType } from '../utils/ast';
 import { buildDocumentContext } from '../utils/document';
+import { resolvePackageImport } from '../utils/package';
 import { getLanguageService } from '../language-service';
 
 const reDynamicPath = /[#{}\*]/;
@@ -77,11 +78,31 @@ async function findDocumentSymbols(document: TextDocument, ast: INode): Promise<
 
 async function findDocumentLinks(document: TextDocument, ast: INode): Promise<DocumentLink[]> {
 	const links = await ls.findDocumentLinks2(document, ast, buildDocumentContext(document.uri));
+	const linksByRange = new Map(links.map(link => [getRangeKey(link), link]));
+
+	// The language service drops or rewrites some targets, so the raw ones are needed.
+	const rawLinks = ls.findDocumentLinks(document, ast, { resolveReference: ref => ref });
+	const documentPath = URI.parse(document.uri).fsPath;
 
 	const result: DocumentLink[] = [];
 
-	for (const link of links) {
-		if (link.target !== undefined && link.target !== '') {
+	for (const rawLink of rawLinks) {
+		const packagePath = rawLink.target === undefined ? undefined : await resolvePackageImport(rawLink.target, documentPath);
+
+		// The package blocks this import.
+		if (packagePath === null) {
+			continue;
+		}
+
+		if (packagePath !== undefined) {
+			result.push({ ...rawLink, target: packagePath });
+
+			continue;
+		}
+
+		const link = linksByRange.get(getRangeKey(rawLink));
+
+		if (link?.target !== undefined && link.target !== '') {
 			result.push({
 				...link,
 				target: URI.parse(link.target).fsPath
@@ -90,6 +111,12 @@ async function findDocumentLinks(document: TextDocument, ast: INode): Promise<Do
 	}
 
 	return result;
+}
+
+function getRangeKey(link: DocumentLink): string {
+	const { start, end } = link.range;
+
+	return `${start.line}:${start.character}-${end.line}:${end.character}`;
 }
 
 function getVariableValue(ast: INode, offset: number): string | null {

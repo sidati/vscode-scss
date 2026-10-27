@@ -2,10 +2,12 @@
 
 import * as assert from 'assert';
 import * as fs from 'fs';
+import * as path from 'path';
 
 import * as sinon from 'sinon';
 import { Stats } from '@nodelib/fs.macchiato';
 import type { DocumentLink } from 'vscode-languageclient';
+import { URI } from 'vscode-uri';
 
 import { parseDocument, convertLinksToImports } from '../../services/parser';
 import * as helpers from '../helpers';
@@ -85,6 +87,54 @@ describe('Services/Parser', () => {
 			const { node } = await parseDocument(document, offset);
 
 			assert.strictEqual(node?.type, NodeType.Identifier);
+		});
+	});
+
+	describe('.parseDocument (package exports)', () => {
+		const root = path.resolve(__dirname, '../../../../fixtures/unit/exports');
+		const uri = URI.file(path.join(root, 'main.scss')).toString();
+
+		async function getImports(lines: string[]): Promise<string[]> {
+			const { symbols } = await parseDocument(helpers.makeDocument(lines, { uri }), null);
+
+			return symbols.imports.map(item => item.filepath);
+		}
+
+		it('should resolve imports through package exports', async () => {
+			const actual = await getImports([
+				'@use "@scope/pkg/waitrose/web/spacing.scss";',
+				'@import "~exact/colors";',
+				'@use "conditional";'
+			]);
+
+			assert.deepStrictEqual(actual, [
+				path.join(root, 'node_modules/@scope/pkg/dist/waitrose/web/spacing.scss'),
+				path.join(root, 'node_modules/exact/lib/_colors.scss'),
+				path.join(root, 'node_modules/conditional/sass/index.scss')
+			]);
+		});
+
+		it('should skip blocked and missing package imports', async () => {
+			const actual = await getImports([
+				'@use "exact/hidden";',
+				'@use "blocked/private.scss";',
+				'@use "blocked/missing";',
+				'@use "exact";'
+			]);
+
+			assert.deepStrictEqual(actual, [path.join(root, 'node_modules/exact/lib/index.scss')]);
+		});
+
+		it('should keep the existing behaviour for relative imports and packages without exports', async () => {
+			const actual = await getImports([
+				'@use "./other";',
+				'@import "~legacy/lib";'
+			]);
+
+			assert.deepStrictEqual(actual, [
+				path.join(root, 'other.scss'),
+				path.join(root, 'node_modules/legacy/_lib.scss')
+			]);
 		});
 	});
 
