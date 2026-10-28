@@ -113,6 +113,32 @@ async function findDocumentLinks(document: TextDocument, ast: INode): Promise<Do
 	return result;
 }
 
+/**
+ * Returns links only for imports that resolve through package exports.
+ * Other imports are left to the editor. Embedded documents are not supported.
+ */
+export async function getPackageExportLinks(document: TextDocument): Promise<DocumentLink[]> {
+	if (document.languageId !== 'scss') {
+		return [];
+	}
+
+	const ast = ls.parseStylesheet(document) as INode;
+	const rawLinks = ls.findDocumentLinks(document, ast, { resolveReference: ref => ref });
+	const documentPath = URI.parse(document.uri).fsPath;
+
+	const result: DocumentLink[] = [];
+
+	for (const rawLink of rawLinks) {
+		const packagePath = rawLink.target === undefined ? undefined : await resolvePackageImport(rawLink.target, documentPath);
+
+		if (typeof packagePath === 'string') {
+			result.push({ range: rawLink.range, target: URI.file(packagePath).toString() });
+		}
+	}
+
+	return result;
+}
+
 function getRangeKey(link: DocumentLink): string {
 	const { start, end } = link.range;
 

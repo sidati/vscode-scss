@@ -9,7 +9,7 @@ import { Stats } from '@nodelib/fs.macchiato';
 import type { DocumentLink } from 'vscode-languageclient';
 import { URI } from 'vscode-uri';
 
-import { parseDocument, convertLinksToImports } from '../../services/parser';
+import { parseDocument, convertLinksToImports, getPackageExportLinks } from '../../services/parser';
 import * as helpers from '../helpers';
 import { NodeType } from '../../types/nodes';
 import type { IImport } from '../../types/symbols';
@@ -135,6 +135,45 @@ describe('Services/Parser', () => {
 				path.join(root, 'other.scss'),
 				path.join(root, 'node_modules/legacy/_lib.scss')
 			]);
+		});
+	});
+
+	describe('.getPackageExportLinks', () => {
+		const root = path.resolve(__dirname, '../../../../fixtures/unit/exports');
+		const uri = URI.file(path.join(root, 'main.scss')).toString();
+
+		it('should return links with the original range for package exports', async () => {
+			const document = helpers.makeDocument(['@use "@scope/pkg/waitrose/web/spacing.scss";'], { uri });
+
+			const actual = await getPackageExportLinks(document);
+
+			assert.deepStrictEqual(actual, [
+				{
+					range: helpers.makeSameLineRange(0, 5, 43),
+					target: URI.file(path.join(root, 'node_modules/@scope/pkg/dist/waitrose/web/spacing.scss')).toString()
+				}
+			]);
+		});
+
+		it('should omit relative, blocked, missing and non-export links', async () => {
+			const document = helpers.makeDocument([
+				'@use "./other";',
+				'@use "exact/hidden";',
+				'@use "blocked/private.scss";',
+				'@use "blocked/missing";',
+				'@import "~legacy/lib";'
+			], { uri });
+
+			assert.deepStrictEqual(await getPackageExportLinks(document), []);
+		});
+
+		it('should return no links for embedded documents', async () => {
+			const document = helpers.makeDocument(['@use "exact";'], {
+				uri: URI.file(path.join(root, 'main.vue')).toString(),
+				languageId: 'vue'
+			});
+
+			assert.deepStrictEqual(await getPackageExportLinks(document), []);
 		});
 	});
 

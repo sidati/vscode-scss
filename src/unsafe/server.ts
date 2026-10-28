@@ -21,6 +21,7 @@ import { doCompletion } from './providers/completion';
 import { doHover } from './providers/hover';
 import { doSignatureHelp } from './providers/signatureHelp';
 import { goDefinition } from './providers/goDefinition';
+import { getPackageExportLinks } from './services/parser';
 import { searchWorkspaceSymbol } from './providers/workspaceSymbol';
 import { findFiles } from './utils/fs';
 import { getSCSSRegionsDocument } from './utils/vue';
@@ -85,6 +86,7 @@ connection.onInitialize(
 				},
 				hoverProvider: true,
 				definitionProvider: true,
+				documentLinkProvider: { resolveProvider: false },
 				workspaceSymbolProvider: true
 			}
 		};
@@ -163,6 +165,15 @@ connection.onDefinition(textDocumentPosition => {
 		return null;
 	}
 	return goDefinition(document, offset, storageService);
+});
+
+connection.onDocumentLinks(params => {
+	const document = documents.get(params.textDocument.uri);
+	if (document === undefined) {
+		return [];
+	}
+
+	return getPackageExportLinks(document);
 });
 
 connection.onWorkspaceSymbol(workspaceSymbolParams => {
